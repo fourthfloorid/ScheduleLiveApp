@@ -83,6 +83,7 @@
     --tracking-wider: .05em;
     --radius-2xl: 1rem;
     --radius-3xl: 1.5rem;
+    --animate-spin: spin 1s linear infinite;
     --default-transition-duration: .15s;
     --default-transition-timing-function: cubic-bezier(.4, 0, .2, 1);
     --default-font-family: var(--font-sans);
@@ -449,6 +450,10 @@
     inset: 37.5%;
   }
 
+  .-top-1 {
+    top: calc(var(--spacing) * -1);
+  }
+
   .top-0 {
     top: calc(var(--spacing) * 0);
   }
@@ -463,6 +468,10 @@
 
   .top-full {
     top: 100%;
+  }
+
+  .-right-1 {
+    right: calc(var(--spacing) * -1);
   }
 
   .right-0 {
@@ -529,6 +538,10 @@
     margin-top: calc(var(--spacing) * 2);
   }
 
+  .mt-3 {
+    margin-top: calc(var(--spacing) * 3);
+  }
+
   .mt-4 {
     margin-top: calc(var(--spacing) * 4);
   }
@@ -563,6 +576,10 @@
 
   .ml-1 {
     margin-left: calc(var(--spacing) * 1);
+  }
+
+  .ml-2 {
+    margin-left: calc(var(--spacing) * 2);
   }
 
   .ml-8 {
@@ -680,6 +697,10 @@
     height: 100vh;
   }
 
+  .max-h-48 {
+    max-height: calc(var(--spacing) * 48);
+  }
+
   .max-h-60 {
     max-height: calc(var(--spacing) * 60);
   }
@@ -776,6 +797,10 @@
 
   .rotate-90 {
     rotate: 90deg;
+  }
+
+  .animate-spin {
+    animation: var(--animate-spin);
   }
 
   .cursor-not-allowed {
@@ -1026,6 +1051,11 @@
     border-width: 0;
   }
 
+  .border-2 {
+    border-style: var(--tw-border-style);
+    border-width: 2px;
+  }
+
   .border-t {
     border-top-style: var(--tw-border-style);
     border-top-width: 1px;
@@ -1055,6 +1085,10 @@
     border-color: #1c64f2;
   }
 
+  .border-\[\#2a6ef0\] {
+    border-color: #2a6ef0;
+  }
+
   .border-\[\#2a6ef0\]\/20 {
     border-color: oklab(57.2994% -.0299879 -.205473 / .2);
   }
@@ -1071,12 +1105,34 @@
     border-color: #e5e7eb;
   }
 
+  .border-\[\#ef4444\] {
+    border-color: #ef4444;
+  }
+
   .border-\[\#f3f4f6\] {
     border-color: #f3f4f6;
   }
 
+  .border-\[\#f59e0b\] {
+    border-color: #f59e0b;
+  }
+
   .border-\[transparent\] {
     border-color: #0000;
+  }
+
+  .border-white\/30 {
+    border-color: #ffffff4d;
+  }
+
+  @supports (color: color-mix(in lab, red, red)) {
+    .border-white\/30 {
+      border-color: color-mix(in oklab, var(--color-white) 30%, transparent);
+    }
+  }
+
+  .border-t-white {
+    border-top-color: var(--color-white);
   }
 
   .bg-\[\#1c64f2\] {
@@ -1097,6 +1153,10 @@
 
   .bg-\[\#dcfce7\] {
     background-color: #dcfce7;
+  }
+
+  .bg-\[\#ef4444\] {
+    background-color: #ef4444;
   }
 
   .bg-\[\#f0f5ff\] {
@@ -1129,6 +1189,10 @@
 
   .bg-\[\#fce7f3\] {
     background-color: #fce7f3;
+  }
+
+  .bg-\[\#fef2f2\] {
+    background-color: #fef2f2;
   }
 
   .bg-\[\#fef3c7\] {
@@ -1464,8 +1528,16 @@
     color: #16a34a;
   }
 
+  .text-\[\#991b1b\] {
+    color: #991b1b;
+  }
+
   .text-\[\#2563eb\] {
     color: #2563eb;
+  }
+
+  .text-\[\#92400e\] {
+    color: #92400e;
   }
 
   .text-\[\#364153\] {
@@ -1590,6 +1662,12 @@
   }
 
   @media (hover: hover) {
+    .hover\:border-\[\#d1d5dc\]:hover {
+      border-color: #d1d5dc;
+    }
+  }
+
+  @media (hover: hover) {
     .hover\:bg-\[\#1e5dd8\]:hover {
       background-color: #1e5dd8;
     }
@@ -1634,6 +1712,12 @@
   @media (hover: hover) {
     .hover\:bg-\[\#fef2f2\]:hover {
       background-color: #fef2f2;
+    }
+  }
+
+  @media (hover: hover) {
+    .hover\:text-\[\#ef4444\]:hover {
+      color: #ef4444;
     }
   }
 
@@ -2270,4 +2354,10 @@ html {
 @property --tw-drop-shadow-size {
   syntax: "*";
   inherits: false
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }

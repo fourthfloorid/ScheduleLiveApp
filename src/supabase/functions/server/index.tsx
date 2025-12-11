@@ -442,6 +442,7 @@ app.get("/make-server-df75f45f/users", verifyAuth, async (c) => {
       email: u.email,
       name: u.user_metadata?.name || u.email,
       role: u.user_metadata?.role || 'host',
+      brandTags: u.user_metadata?.brandTags || [], // Brand tags for hosts
       createdAt: u.created_at
     }));
 
@@ -462,10 +463,13 @@ app.put("/make-server-df75f45f/users/:id", verifyAuth, async (c) => {
       return c.json({ error: 'Permission denied' }, 403);
     }
 
-    const { name, role, email } = await c.req.json();
+    const { name, role, email, brandTags } = await c.req.json();
     
     const updateData: any = {
-      user_metadata: { name }
+      user_metadata: { 
+        name,
+        brandTags: brandTags || [] // Include brand tags in metadata
+      }
     };
 
     // Only admin can change role and email
@@ -492,7 +496,8 @@ app.put("/make-server-df75f45f/users/:id", verifyAuth, async (c) => {
       id: data.user.id,
       email: data.user.email,
       name: data.user.user_metadata?.name || data.user.email,
-      role: data.user.user_metadata?.role || 'host'
+      role: data.user.user_metadata?.role || 'host',
+      brandTags: data.user.user_metadata?.brandTags || []
     };
 
     return c.json({ user: updatedUser });
@@ -590,6 +595,342 @@ app.get("/make-server-df75f45f/my-rooms", verifyAuth, async (c) => {
   } catch (error) {
     console.log(`Get my rooms error: ${error}`);
     return c.json({ error: 'Failed to fetch assigned rooms' }, 500);
+  }
+});
+
+// ============================================================================
+// ROOM AVAILABILITY VALIDATION & MATCHING SYSTEM
+// ============================================================================
+
+/**
+ * Validates if a host is compatible with a brand based on brand tags
+ * - If host has no brand tags (empty array), they can work with any brand (flexible host)
+ * - If host has brand tags, they can only work with brands in their tag list
+ * - If brand is not in host's tags, they are not compatible
+ */
+function isHostBrandCompatible(hostBrandTags: string[], targetBrandId: string): boolean {
+  // Empty brand tags means host is flexible and can work with any brand
+  if (!hostBrandTags || hostBrandTags.length === 0) {
+    return true;
+  }
+  
+  // Check if target brand is in host's allowed brands
+  return hostBrandTags.includes(targetBrandId);
+}
+
+/**
+ * Checks if a specific time slot is available in a room
+ * Returns true if the slot is NOT already assigned
+ */
+function isTimeSlotAvailable(
+  existingAssignments: any[],
+  roomId: string,
+  date: string,
+  timeSlot: string
+): boolean {
+  // Check all existing assignments for this room and date
+  const conflicts = existingAssignments.filter((assignment: any) => {
+    return (
+      assignment.roomId === roomId &&
+      assignment.date === date &&
+      assignment.timeSlots.includes(timeSlot)
+    );
+  });
+  
+  return conflicts.length === 0;
+}
+
+/**
+ * Validates if requested time slots match host's availability
+ * All requested slots must be in the host's available schedule
+ */
+function areTimeSlotsAvailableForHost(
+  hostSchedules: any[],
+  hostId: string,
+  date: string,
+  requestedTimeSlots: string[]
+): boolean {
+  // Find host's schedule for the specific date
+  const hostSchedule = hostSchedules.find((s: any) => 
+    s.hostId === hostId && s.date === date
+  );
+  
+  if (!hostSchedule) {
+    return false; // Host has no availability for this date
+  }
+  
+  // Check if ALL requested time slots are in host's available slots
+  return requestedTimeSlots.every(slot => 
+    hostSchedule.timeSlots.includes(slot)
+  );
+}
+
+/**
+ * Main validation endpoint for room assignment
+ * Validates:
+ * 1. Brand compatibility with host
+ * 2. Room time slot availability
+ * 3. Host schedule availability
+ */
+app.post("/make-server-df75f45f/validate-room-assignment", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const { roomId, date, brandId, hostId, timeSlots } = await c.req.json();
+    
+    if (!roomId || !date || !brandId || !hostId || !timeSlots || !Array.isArray(timeSlots)) {
+      return c.json({ 
+        valid: false,
+        error: 'Missing required fields: roomId, date, brandId, hostId, timeSlots' 
+      }, 400);
+    }
+
+    // Get host information to check brand compatibility
+    const { data: { user: hostUser }, error: hostError } = await supabase.auth.admin.getUserById(hostId);
+    
+    if (hostError || !hostUser) {
+      return c.json({ 
+        valid: false,
+        error: 'Host not found',
+        details: hostError?.message 
+      }, 404);
+    }
+
+    const hostBrandTags = hostUser.user_metadata?.brandTags || [];
+
+    // Validation 1: Check brand compatibility
+    if (!isHostBrandCompatible(hostBrandTags, brandId)) {
+      return c.json({
+        valid: false,
+        error: 'Brand compatibility failed',
+        reason: `Host is not authorized for this brand. Host's allowed brands: ${hostBrandTags.join(', ') || 'All brands (flexible host)'}`,
+        code: 'BRAND_INCOMPATIBLE'
+      });
+    }
+
+    // Get all existing assignments and schedules
+    const [allAssignments, allSchedules] = await Promise.all([
+      kv.getByPrefix('assignment:'),
+      kv.getByPrefix('schedule:')
+    ]);
+
+    // Validation 2: Check room time slot availability
+    const unavailableSlots: string[] = [];
+    for (const slot of timeSlots) {
+      if (!isTimeSlotAvailable(allAssignments, roomId, date, slot)) {
+        unavailableSlots.push(slot);
+      }
+    }
+
+    if (unavailableSlots.length > 0) {
+      return c.json({
+        valid: false,
+        error: 'Room time slots not available',
+        reason: `The following time slots are already assigned: ${unavailableSlots.join(', ')}`,
+        unavailableSlots,
+        code: 'ROOM_SLOT_OCCUPIED'
+      });
+    }
+
+    // Validation 3: Check host schedule availability
+    if (!areTimeSlotsAvailableForHost(allSchedules, hostId, date, timeSlots)) {
+      const hostSchedule = allSchedules.find((s: any) => 
+        s.hostId === hostId && s.date === date
+      );
+      
+      return c.json({
+        valid: false,
+        error: 'Host not available for requested time slots',
+        reason: hostSchedule 
+          ? `Host is only available at: ${hostSchedule.timeSlots.join(', ')}` 
+          : 'Host has no availability scheduled for this date',
+        hostAvailableSlots: hostSchedule?.timeSlots || [],
+        code: 'HOST_NOT_AVAILABLE'
+      });
+    }
+
+    // All validations passed!
+    return c.json({
+      valid: true,
+      message: 'Room assignment is valid',
+      validation: {
+        brandCompatible: true,
+        roomSlotsAvailable: true,
+        hostAvailable: true
+      }
+    });
+
+  } catch (error) {
+    console.log(`Validate room assignment error: ${error}`);
+    return c.json({ 
+      valid: false,
+      error: 'Validation failed', 
+      details: String(error) 
+    }, 500);
+  }
+});
+
+/**
+ * Get available hosts for a specific room, brand, date, and time slots
+ * Returns only hosts that are:
+ * 1. Compatible with the brand
+ * 2. Available at the requested time slots
+ * 3. Not already assigned to another room at those times
+ */
+app.post("/make-server-df75f45f/get-available-hosts", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const { roomId, date, brandId, timeSlots } = await c.req.json();
+    
+    if (!date || !brandId || !timeSlots || !Array.isArray(timeSlots)) {
+      return c.json({ error: 'date, brandId, and timeSlots are required' }, 400);
+    }
+
+    // Get all users, schedules, and assignments
+    const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers();
+    
+    if (usersError) {
+      return c.json({ error: 'Failed to fetch users' }, 500);
+    }
+
+    const [allSchedules, allAssignments] = await Promise.all([
+      kv.getByPrefix('schedule:'),
+      kv.getByPrefix('assignment:')
+    ]);
+
+    // Filter to get only hosts
+    const hosts = users.filter(u => u.user_metadata?.role === 'host');
+
+    // Find available hosts
+    const availableHosts = hosts.filter(host => {
+      const hostBrandTags = host.user_metadata?.brandTags || [];
+      
+      // Check 1: Brand compatibility
+      if (!isHostBrandCompatible(hostBrandTags, brandId)) {
+        return false;
+      }
+
+      // Check 2: Host has availability for the requested date and time slots
+      if (!areTimeSlotsAvailableForHost(allSchedules, host.id, date, timeSlots)) {
+        return false;
+      }
+
+      // Check 3: Host is not already assigned to another room at these times
+      const hasConflict = allAssignments.some((assignment: any) => {
+        return (
+          assignment.hostId === host.id &&
+          assignment.date === date &&
+          assignment.timeSlots.some((slot: string) => timeSlots.includes(slot))
+        );
+      });
+
+      return !hasConflict;
+    }).map(host => {
+      const hostSchedule = allSchedules.find((s: any) => 
+        s.hostId === host.id && s.date === date
+      );
+
+      // Get all time slots that the host has already booked on this date (across all rooms)
+      const hostBookedSlots = allAssignments
+        .filter((a: any) => a.hostId === host.id && a.date === date)
+        .flatMap((a: any) => a.timeSlots);
+
+      // Filter out booked slots from host's available slots
+      const availableSlots = (hostSchedule?.timeSlots || []).filter(
+        (slot: string) => !hostBookedSlots.includes(slot)
+      );
+
+      return {
+        id: host.id,
+        email: host.email,
+        name: host.user_metadata?.name || host.email,
+        brandTags: host.user_metadata?.brandTags || [],
+        availableSlots: availableSlots,
+        matchingSlots: timeSlots.filter((slot: string) => 
+          availableSlots.includes(slot)
+        )
+      };
+    });
+
+    return c.json({ 
+      hosts: availableHosts,
+      totalAvailable: availableHosts.length 
+    });
+
+  } catch (error) {
+    console.log(`Get available hosts error: ${error}`);
+    return c.json({ error: 'Failed to fetch available hosts', details: String(error) }, 500);
+  }
+});
+
+/**
+ * Get room availability status for a specific date
+ * Shows which time slots are occupied and which are free
+ */
+app.get("/make-server-df75f45f/room-availability/:roomId/:date", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const roomId = c.req.param('roomId');
+    const date = c.req.param('date');
+
+    // Get all assignments for this room and date
+    const allAssignments = await kv.getByPrefix('assignment:');
+    
+    const roomAssignments = allAssignments.filter((a: any) => 
+      a.roomId === roomId && a.date === date
+    );
+
+    // Get all occupied time slots
+    const occupiedSlots = new Map<string, any>(); // time -> assignment info
+    
+    roomAssignments.forEach((assignment: any) => {
+      assignment.timeSlots.forEach((slot: string) => {
+        occupiedSlots.set(slot, {
+          hostId: assignment.hostId,
+          hostName: assignment.hostName,
+          brandId: assignment.brandId,
+          brandName: assignment.brandName,
+          assignmentId: assignment.id
+        });
+      });
+    });
+
+    // Common time slots (can be customized)
+    const commonTimeSlots = [
+      '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
+      '15:00', '16:00', '17:00', '18:00', '19:00', '20:00',
+      '21:00', '22:00'
+    ];
+
+    const availability = commonTimeSlots.map(slot => ({
+      time: slot,
+      available: !occupiedSlots.has(slot),
+      assignment: occupiedSlots.get(slot) || null
+    }));
+
+    return c.json({
+      roomId,
+      date,
+      availability,
+      totalSlots: commonTimeSlots.length,
+      occupiedSlots: occupiedSlots.size,
+      availableSlots: commonTimeSlots.length - occupiedSlots.size
+    });
+
+  } catch (error) {
+    console.log(`Get room availability error: ${error}`);
+    return c.json({ error: 'Failed to fetch room availability' }, 500);
   }
 });
 

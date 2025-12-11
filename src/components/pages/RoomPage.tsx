@@ -1,8 +1,16 @@
 import { useState, useEffect } from 'react';
 import { User as UserType } from '../../App';
-import { Tv, Plus, Calendar, Tag, UserCircle, Clock, Trash2, Edit2, ChevronDown } from 'lucide-react';
-import { roomAPI, brandAPI, assignmentAPI, scheduleAPI } from '../../utils/api';
+import { Tv, Plus, Calendar, Tag, UserCircle, Clock, Trash2, Edit2, ChevronDown, AlertCircle } from 'lucide-react';
+import { roomAPI, brandAPI, assignmentAPI, scheduleAPI, userAPI } from '../../utils/api';
 import DatePicker from '../ui/DatePicker';
+import { 
+  getAvailableHosts, 
+  getRoomAvailability, 
+  validateRoomAssignment,
+  formatValidationError,
+  getValidationStatusIcon 
+} from '../../utils/roomValidation';
+import { getAuthToken } from '../../utils/api';
 
 interface RoomPageProps {
   user: UserType;
@@ -41,15 +49,41 @@ interface HostAvailability {
   timeSlots: string[];
 }
 
+interface HostData {
+  id: string;
+  email: string;
+  name: string;
+  brandTags: string[];
+  availableSlots: string[];
+  matchingSlots: string[];
+}
+
+interface RoomTimeSlot {
+  time: string;
+  available: boolean;
+  assignment: {
+    hostId: string;
+    hostName: string;
+    brandId: string;
+    brandName: string;
+    assignmentId: string;
+  } | null;
+}
+
 export default function RoomPage({ user }: RoomPageProps) {
   const [rooms, setRooms] = useState<Room[]>([]);
   const [brands, setBrands] = useState<Brand[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
   const [hostAvailability, setHostAvailability] = useState<HostAvailability[]>([]);
+  const [availableHosts, setAvailableHosts] = useState<HostData[]>([]);
+  const [roomOccupiedSlots, setRoomOccupiedSlots] = useState<string[]>([]);
+  const [roomAvailabilityData, setRoomAvailabilityData] = useState<RoomTimeSlot[]>([]);
   
   const [loading, setLoading] = useState(true);
   const [showAssignModal, setShowAssignModal] = useState(false);
   const [showRoomModal, setShowRoomModal] = useState(false);
+  const [validating, setValidating] = useState(false);
+  const [validationError, setValidationError] = useState<string | null>(null);
   
   // Room form
   const [roomForm, setRoomForm] = useState({ name: '', description: '' });
@@ -75,8 +109,34 @@ export default function RoomPage({ user }: RoomPageProps) {
       fetchHostAvailability(assignForm.date);
     } else {
       setHostAvailability([]);
+      setAvailableHosts([]);
     }
   }, [assignForm.date]);
+
+  // Fetch room availability when room and date are selected
+  useEffect(() => {
+    if (assignForm.roomId && assignForm.date) {
+      fetchRoomAvailability();
+    } else {
+      setRoomOccupiedSlots([]);
+      setRoomAvailabilityData([]);
+    }
+  }, [assignForm.roomId, assignForm.date]);
+
+  // Fetch available hosts when brand, date are selected
+  useEffect(() => {
+    if (assignForm.brandId && assignForm.date) {
+      fetchAvailableHostsForBrand();
+    } else {
+      setAvailableHosts([]);
+    }
+  }, [assignForm.brandId, assignForm.date]);
+
+  // Reset time slots when host changes
+  useEffect(() => {
+    setAssignForm(prev => ({ ...prev, timeSlots: [] }));
+    setValidationError(null);
+  }, [assignForm.hostId]);
 
   const fetchData = async () => {
     setLoading(true);
@@ -103,6 +163,44 @@ export default function RoomPage({ user }: RoomPageProps) {
     } catch (error) {
       console.error('Failed to fetch host availability:', error);
       setHostAvailability([]);
+    }
+  };
+
+  const fetchRoomAvailability = async () => {
+    const token = getAuthToken();
+    if (!token || !assignForm.roomId || !assignForm.date) return;
+
+    try {
+      const availability = await getRoomAvailability(token, assignForm.roomId, assignForm.date);
+      if (availability) {
+        setRoomAvailabilityData(availability.availability);
+        const occupied = availability.availability
+          .filter(slot => !slot.available)
+          .map(slot => slot.time);
+        setRoomOccupiedSlots(occupied);
+      }
+    } catch (error) {
+      console.error('Failed to fetch room availability:', error);
+      setRoomOccupiedSlots([]);
+    }
+  };
+
+  const fetchAvailableHostsForBrand = async () => {
+    const token = getAuthToken();
+    if (!token || !assignForm.brandId || !assignForm.date) return;
+
+    try {
+      // Get all time slots (we'll filter by host availability later)
+      const { hosts } = await getAvailableHosts(token, {
+        roomId: assignForm.roomId,
+        date: assignForm.date,
+        brandId: assignForm.brandId,
+        timeSlots: [] // Empty means get all hosts compatible with brand
+      });
+      setAvailableHosts(hosts);
+    } catch (error) {
+      console.error('Failed to fetch available hosts:', error);
+      setAvailableHosts([]);
     }
   };
 
@@ -149,10 +247,36 @@ export default function RoomPage({ user }: RoomPageProps) {
       return;
     }
 
+    setValidating(true);
+    setValidationError(null);
+
     try {
+      const token = getAuthToken();
+      if (!token) {
+        throw new Error('Not authenticated');
+      }
+
+      // Validate assignment first
+      const validation = await validateRoomAssignment(token, {
+        roomId: assignForm.roomId,
+        date: assignForm.date,
+        brandId: assignForm.brandId,
+        hostId: assignForm.hostId,
+        timeSlots: assignForm.timeSlots
+      });
+
+      if (!validation.valid) {
+        const errorMessage = formatValidationError(validation);
+        setValidationError(errorMessage);
+        alert(errorMessage);
+        setValidating(false);
+        return;
+      }
+
+      // Validation passed, create assignment
       const room = rooms.find(r => r.id === assignForm.roomId);
       const brand = brands.find(b => b.id === assignForm.brandId);
-      const host = hostAvailability.find(h => h.hostId === assignForm.hostId);
+      const selectedHost = availableHosts.find(h => h.id === assignForm.hostId);
 
       await assignmentAPI.create({
         roomId: assignForm.roomId,
@@ -161,16 +285,21 @@ export default function RoomPage({ user }: RoomPageProps) {
         brandId: assignForm.brandId,
         brandName: brand?.name || '',
         hostId: assignForm.hostId,
-        hostName: host?.hostName || '',
+        hostName: selectedHost?.name || '',
         timeSlots: assignForm.timeSlots
       });
 
       await fetchData();
       setShowAssignModal(false);
       setAssignForm({ roomId: '', date: '', brandId: '', hostId: '', timeSlots: [] });
-      alert('Host assigned successfully!');
+      setValidationError(null);
+      alert('✅ Host assigned successfully!');
     } catch (error: any) {
-      alert(error.message || 'Failed to create assignment');
+      const errorMessage = error.message || 'Failed to create assignment';
+      setValidationError(errorMessage);
+      alert(errorMessage);
+    } finally {
+      setValidating(false);
     }
   };
 
@@ -189,6 +318,11 @@ export default function RoomPage({ user }: RoomPageProps) {
     if (isTimeSlotPast(timeSlot)) {
       return; // Don't allow selection of past time slots
     }
+
+    // Check if time slot is occupied in the room
+    if (isTimeSlotOccupied(timeSlot)) {
+      return; // Don't allow selection of occupied slots
+    }
     
     setAssignForm(prev => ({
       ...prev,
@@ -196,6 +330,11 @@ export default function RoomPage({ user }: RoomPageProps) {
         ? prev.timeSlots.filter(t => t !== timeSlot)
         : [...prev.timeSlots, timeSlot].sort()
     }));
+  };
+
+  // Check if a time slot is occupied in the room
+  const isTimeSlotOccupied = (timeSlot: string): boolean => {
+    return roomOccupiedSlots.includes(timeSlot);
   };
 
   // Check if a time slot is in the past
@@ -219,7 +358,8 @@ export default function RoomPage({ user }: RoomPageProps) {
   const today = new Date().toISOString().split('T')[0];
 
   // Selected host's available time slots
-  const selectedHostAvailability = hostAvailability.find(h => h.hostId === assignForm.hostId);
+  const selectedHost = availableHosts.find(h => h.id === assignForm.hostId);
+  const selectedHostSlots = selectedHost?.availableSlots || [];
 
   // Group assignments by room
   const assignmentsByRoom = assignments.reduce((acc, assignment) => {
@@ -574,46 +714,100 @@ export default function RoomPage({ user }: RoomPageProps) {
                 </div>
 
                 <div>
-                  <label className="block text-[#364153] mb-2 text-sm">Select Host</label>
+                  <label className="block text-[#364153] mb-2 text-sm">
+                    Select Host
+                    {assignForm.brandId && availableHosts.length > 0 && (
+                      <span className="text-[#16a34a] ml-2 text-xs">
+                        ✓ {availableHosts.length} host(s) compatible
+                      </span>
+                    )}
+                  </label>
                   <div className="relative">
                     <select
                       value={assignForm.hostId}
                       onChange={(e) => setAssignForm({ ...assignForm, hostId: e.target.value, timeSlots: [] })}
                       className="w-full px-4 py-2 border border-[#d1d5dc] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#2a6ef0] appearance-none pr-8"
                       required
-                      disabled={!assignForm.date}
+                      disabled={!assignForm.brandId || !assignForm.date}
                     >
                       <option value="">
-                        {!assignForm.date ? 'Select date first...' : hostAvailability.length > 0 ? 'Choose a host...' : 'No hosts available'}
+                        {!assignForm.date 
+                          ? 'Select date first...' 
+                          : !assignForm.brandId 
+                          ? 'Select brand first...'
+                          : availableHosts.length > 0 
+                          ? 'Choose a host...' 
+                          : 'No compatible hosts available'}
                       </option>
-                      {hostAvailability.map(host => (
-                        <option key={host.hostId} value={host.hostId}>
-                          {host.hostName} ({host.timeSlots.length} slots)
-                        </option>
-                      ))}
+                      {availableHosts.map(host => {
+                        const brandInfo = host.brandTags.length === 0 
+                          ? '🌟 Flexible' 
+                          : `🎯 ${host.brandTags.length} brand(s)`;
+                        return (
+                          <option key={host.id} value={host.id}>
+                            {host.name} - {brandInfo} ({host.availableSlots.length} slots)
+                          </option>
+                        );
+                      })}
                     </select>
                     <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-5 text-[#6b7280] pointer-events-none" />
                   </div>
+                  {assignForm.brandId && availableHosts.length === 0 && assignForm.date && (
+                    <p className="text-xs text-[#ef4444] mt-1 flex items-center gap-1">
+                      <AlertCircle className="size-3" />
+                      No hosts available for this brand on this date
+                    </p>
+                  )}
                 </div>
               </div>
 
               {/* Time Slots Selection */}
-              {selectedHostAvailability && (
+              {selectedHost && (
                 <div>
-                  <label className="block text-[#364153] mb-3 text-sm">Select Time Slots</label>
+                  <label className="block text-[#364153] mb-2 text-sm">Select Time Slots</label>
+                  
+                  {/* Room Availability Info */}
+                  {roomOccupiedSlots.length > 0 && (
+                    <div className="mb-3 p-3 bg-[#fef3c7] border border-[#f59e0b] rounded-lg">
+                      <p className="text-xs text-[#92400e] flex items-center gap-1">
+                        <AlertCircle className="size-3" />
+                        {roomOccupiedSlots.length} slot(s) already booked in this room on this date
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-2">
+                        {roomOccupiedSlots.map(slot => (
+                          <span key={slot} className="text-xs px-2 py-0.5 bg-[#ef4444] text-white rounded">
+                            {slot} ✕
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="bg-[#f9fafb] rounded-lg p-4 max-h-60 overflow-y-auto">
                     <div className="grid grid-cols-3 sm:grid-cols-4 md:grid-cols-6 gap-2">
-                      {selectedHostAvailability.timeSlots.map((timeSlot) => {
+                      {selectedHostSlots.map((timeSlot) => {
                         const isSelected = assignForm.timeSlots.includes(timeSlot);
                         const isPast = isTimeSlotPast(timeSlot);
+                        const isOccupied = isTimeSlotOccupied(timeSlot);
+                        const isDisabled = isPast || isOccupied;
+
                         return (
                           <button
                             key={timeSlot}
                             type="button"
                             onClick={() => handleTimeSlotToggle(timeSlot)}
-                            disabled={isPast}
-                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
-                              isPast
+                            disabled={isDisabled}
+                            title={
+                              isPast 
+                                ? 'Past time slot' 
+                                : isOccupied 
+                                ? 'Already booked in this room' 
+                                : isSelected 
+                                ? 'Click to deselect' 
+                                : 'Click to select'
+                            }
+                            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors relative ${
+                              isDisabled
                                 ? 'bg-[#f3f4f6] text-[#d1d5dc] cursor-not-allowed opacity-50'
                                 : isSelected
                                 ? 'bg-[#2a6ef0] text-white'
@@ -621,13 +815,35 @@ export default function RoomPage({ user }: RoomPageProps) {
                             }`}
                           >
                             {timeSlot}
+                            {isOccupied && (
+                              <span className="absolute -top-1 -right-1 bg-[#ef4444] text-white text-xs size-4 flex items-center justify-center rounded-full">
+                                ✕
+                              </span>
+                            )}
                           </button>
                         );
                       })}
                     </div>
                   </div>
-                  <p className="text-xs text-[#6b7280] mt-2">
-                    Selected: {assignForm.timeSlots.length} slot(s)
+                  
+                  <div className="flex items-center justify-between mt-2 text-xs">
+                    <p className="text-[#6b7280]">
+                      Selected: <span className="font-medium text-[#2a6ef0]">{assignForm.timeSlots.length}</span> slot(s)
+                    </p>
+                    <div className="flex items-center gap-3 text-[#6b7280]">
+                      <span>✓ Available</span>
+                      <span className="text-[#ef4444]">✕ Booked</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Validation Error Display */}
+              {validationError && (
+                <div className="p-3 bg-[#fef2f2] border border-[#ef4444] rounded-lg">
+                  <p className="text-sm text-[#991b1b] flex items-center gap-2">
+                    <AlertCircle className="size-4" />
+                    {validationError}
                   </p>
                 </div>
               )}
@@ -635,18 +851,27 @@ export default function RoomPage({ user }: RoomPageProps) {
               <div className="flex gap-3 pt-2">
                 <button
                   type="submit"
-                  disabled={!selectedHostAvailability || assignForm.timeSlots.length === 0}
-                  className="flex-1 bg-[#16a34a] text-white px-6 py-2 rounded-lg hover:bg-[#15803d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  disabled={!selectedHost || assignForm.timeSlots.length === 0 || validating}
+                  className="flex-1 bg-[#16a34a] text-white px-6 py-2 rounded-lg hover:bg-[#15803d] transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
-                  Assign Host
+                  {validating ? (
+                    <>
+                      <div className="size-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                      Validating...
+                    </>
+                  ) : (
+                    'Assign Host'
+                  )}
                 </button>
                 <button
                   type="button"
                   onClick={() => {
                     setShowAssignModal(false);
                     setAssignForm({ roomId: '', date: '', brandId: '', hostId: '', timeSlots: [] });
+                    setValidationError(null);
                   }}
                   className="flex-1 bg-[#f3f4f6] text-[#4a5565] px-6 py-2 rounded-lg hover:bg-[#e5e7eb] transition-colors"
+                  disabled={validating}
                 >
                   Cancel
                 </button>

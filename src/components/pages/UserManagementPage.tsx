@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { User as UserType } from '../../App';
-import { Users, Edit2, Trash2, Plus, Search, ChevronDown, UserCircle } from 'lucide-react';
+import { Users, Edit2, Trash2, Plus, Search, ChevronDown, UserCircle, Tag, X } from 'lucide-react';
 import { userAPI } from '../../utils/api';
 
 interface UserManagementPageProps {
@@ -12,7 +12,14 @@ interface UserData {
   email: string;
   name: string;
   role: 'host' | 'admin';
+  brandTags?: string[]; // Array of brand IDs
   createdAt?: string;
+}
+
+interface Brand {
+  id: string;
+  name: string;
+  description?: string;
 }
 
 export default function UserManagementPage({ user }: UserManagementPageProps) {
@@ -22,9 +29,11 @@ export default function UserManagementPage({ user }: UserManagementPageProps) {
   const [filterRole, setFilterRole] = useState<'all' | 'host' | 'admin'>('all');
   const [editingUser, setEditingUser] = useState<UserData | null>(null);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [brands, setBrands] = useState<Brand[]>([]);
 
   useEffect(() => {
     fetchUsers();
+    fetchBrands();
   }, []);
 
   const fetchUsers = async () => {
@@ -37,6 +46,16 @@ export default function UserManagementPage({ user }: UserManagementPageProps) {
       alert('Failed to fetch users');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchBrands = async () => {
+    try {
+      const fetchedBrands = await userAPI.getBrands();
+      setBrands(fetchedBrands);
+    } catch (error) {
+      console.error('Failed to fetch brands:', error);
+      alert('Failed to fetch brands');
     }
   };
 
@@ -53,7 +72,8 @@ export default function UserManagementPage({ user }: UserManagementPageProps) {
       await userAPI.update(editingUser.id, {
         name: editingUser.name,
         role: editingUser.role,
-        email: editingUser.email
+        email: editingUser.email,
+        brandTags: editingUser.brandTags
       });
       await fetchUsers();
       setIsEditModalOpen(false);
@@ -209,6 +229,9 @@ export default function UserManagementPage({ user }: UserManagementPageProps) {
                 <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-[#6b7280] uppercase tracking-wider">
                   Role
                 </th>
+                <th className="px-4 md:px-6 py-3 text-left text-xs font-medium text-[#6b7280] uppercase tracking-wider">
+                  Brand Access
+                </th>
                 <th className="px-4 md:px-6 py-3 text-right text-xs font-medium text-[#6b7280] uppercase tracking-wider">
                   Actions
                 </th>
@@ -217,63 +240,107 @@ export default function UserManagementPage({ user }: UserManagementPageProps) {
             <tbody className="divide-y divide-[#e5e7eb]">
               {loading ? (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-[#6b7280]">
+                  <td colSpan={5} className="px-6 py-12 text-center text-[#6b7280]">
                     Loading users...
                   </td>
                 </tr>
               ) : filteredUsers.length > 0 ? (
-                filteredUsers.map((userData) => (
-                  <tr key={userData.id} className="hover:bg-[#f9fafb] transition-colors">
-                    <td className="px-4 md:px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="bg-[#f0f5ff] p-2 rounded-lg">
-                          <UserCircle className="size-5 text-[#2a6ef0]" />
+                filteredUsers.map((userData) => {
+                  const brandTagCount = userData.brandTags?.length || 0;
+                  const isFlexible = brandTagCount === 0;
+                  
+                  return (
+                    <tr key={userData.id} className="hover:bg-[#f9fafb] transition-colors">
+                      <td className="px-4 md:px-6 py-4">
+                        <div className="flex items-center gap-3">
+                          <div className="bg-[#f0f5ff] p-2 rounded-lg">
+                            <UserCircle className="size-5 text-[#2a6ef0]" />
+                          </div>
+                          <div>
+                            <p className="text-[#1f2937] font-medium text-sm">{userData.name}</p>
+                            {userData.id === user.id && (
+                              <span className="text-xs text-[#2a6ef0]">(You)</span>
+                            )}
+                          </div>
                         </div>
-                        <div>
-                          <p className="text-[#1f2937] font-medium text-sm">{userData.name}</p>
-                          {userData.id === user.id && (
-                            <span className="text-xs text-[#2a6ef0]">(You)</span>
+                      </td>
+                      <td className="px-4 md:px-6 py-4 text-[#6b7280] text-sm">
+                        {userData.email}
+                      </td>
+                      <td className="px-4 md:px-6 py-4">
+                        <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
+                          userData.role === 'admin'
+                            ? 'bg-[#fce7f3] text-[#ec4899]'
+                            : 'bg-[#dcfce7] text-[#16a34a]'
+                        }`}>
+                          {userData.role}
+                        </span>
+                      </td>
+                      <td className="px-4 md:px-6 py-4">
+                        {userData.role === 'host' ? (
+                          <div className="flex items-center gap-2">
+                            {isFlexible ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-[#fef3c7] text-[#f59e0b]">
+                                🌟 Flexible
+                              </span>
+                            ) : (
+                              <>
+                                <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-[#f0f5ff] text-[#2a6ef0]">
+                                  🎯 {brandTagCount} {brandTagCount === 1 ? 'Brand' : 'Brands'}
+                                </span>
+                                <div className="flex flex-wrap gap-1">
+                                  {userData.brandTags?.slice(0, 2).map((brandId) => {
+                                    const brand = brands.find(b => b.id === brandId);
+                                    return brand ? (
+                                      <span
+                                        key={brandId}
+                                        className="inline-flex items-center gap-1 px-2 py-0.5 bg-white border border-[#d1d5dc] rounded text-xs text-[#6b7280]"
+                                        title={brand.name}
+                                      >
+                                        <Tag className="size-3" />
+                                        {brand.name}
+                                      </span>
+                                    ) : null;
+                                  })}
+                                  {brandTagCount > 2 && (
+                                    <span className="inline-flex items-center px-2 py-0.5 bg-white border border-[#d1d5dc] rounded text-xs text-[#6b7280]">
+                                      +{brandTagCount - 2}
+                                    </span>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="text-xs text-[#9ca3af]">-</span>
+                        )}
+                      </td>
+                      <td className="px-4 md:px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            onClick={() => handleEditUser(userData)}
+                            className="p-2 text-[#2a6ef0] hover:bg-[#f0f5ff] rounded-lg transition-colors"
+                            title="Edit user"
+                          >
+                            <Edit2 className="size-4" />
+                          </button>
+                          {userData.id !== user.id && (
+                            <button
+                              onClick={() => handleDeleteUser(userData.id, userData.name)}
+                              className="p-2 text-[#ef4444] hover:bg-[#fef2f2] rounded-lg transition-colors"
+                              title="Delete user"
+                            >
+                              <Trash2 className="size-4" />
+                            </button>
                           )}
                         </div>
-                      </div>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 text-[#6b7280] text-sm">
-                      {userData.email}
-                    </td>
-                    <td className="px-4 md:px-6 py-4">
-                      <span className={`inline-flex px-2 py-1 text-xs font-medium rounded-full ${
-                        userData.role === 'admin'
-                          ? 'bg-[#fce7f3] text-[#ec4899]'
-                          : 'bg-[#dcfce7] text-[#16a34a]'
-                      }`}>
-                        {userData.role}
-                      </span>
-                    </td>
-                    <td className="px-4 md:px-6 py-4 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          onClick={() => handleEditUser(userData)}
-                          className="p-2 text-[#2a6ef0] hover:bg-[#f0f5ff] rounded-lg transition-colors"
-                          title="Edit user"
-                        >
-                          <Edit2 className="size-4" />
-                        </button>
-                        {userData.id !== user.id && (
-                          <button
-                            onClick={() => handleDeleteUser(userData.id, userData.name)}
-                            className="p-2 text-[#ef4444] hover:bg-[#fef2f2] rounded-lg transition-colors"
-                            title="Delete user"
-                          >
-                            <Trash2 className="size-4" />
-                          </button>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                      </td>
+                    </tr>
+                  );
+                })
               ) : (
                 <tr>
-                  <td colSpan={4} className="px-6 py-12 text-center text-[#9ca3af]">
+                  <td colSpan={5} className="px-6 py-12 text-center text-[#9ca3af]">
                     <Users className="size-12 mx-auto mb-3 opacity-20" />
                     <p>No users found</p>
                   </td>
@@ -327,6 +394,140 @@ export default function UserManagementPage({ user }: UserManagementPageProps) {
                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 size-5 text-[#6b7280] pointer-events-none" />
                 </div>
               </div>
+
+              {/* Brand Tags - Only for Host role */}
+              {editingUser.role === 'host' && (
+                <div>
+                  <label className="block text-[#364153] mb-2 text-sm">
+                    Brand Access
+                    <span className="text-[#6b7280] ml-2 text-xs"> (Select brands host can work with)</span>
+                  </label>
+                  
+                  {/* Brand Tag Type Toggle */}
+                  <div className="mb-3 p-3 bg-[#f9fafb] rounded-lg border border-[#e5e7eb]">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm text-[#6b7280]">
+                        {(!editingUser.brandTags || editingUser.brandTags.length === 0) 
+                          ? '🌟 Flexible Host - Can work with ALL brands'
+                          : `🎯 Exclusive Host - ${editingUser.brandTags.length} brand(s) only`
+                        }
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (!editingUser.brandTags || editingUser.brandTags.length === 0) {
+                          // Do nothing - already flexible
+                        } else {
+                          setEditingUser({ ...editingUser, brandTags: [] });
+                        }
+                      }}
+                      className="text-xs text-[#2a6ef0] hover:underline"
+                    >
+                      {(!editingUser.brandTags || editingUser.brandTags.length === 0)
+                        ? 'Currently flexible (can work with all brands)'
+                        : 'Clear all to make flexible'
+                      }
+                    </button>
+                  </div>
+
+                  {/* Brand Selection Grid */}
+                  <div className="space-y-2 max-h-48 overflow-y-auto border border-[#d1d5dc] rounded-lg p-3">
+                    {brands.length === 0 ? (
+                      <div className="text-center py-4 text-[#9ca3af] text-sm">
+                        <Tag className="size-8 mx-auto mb-2 opacity-20" />
+                        <p>No brands available</p>
+                        <p className="text-xs mt-1">Create brands in Brand Management</p>
+                      </div>
+                    ) : (
+                      brands.map((brand) => {
+                        const isSelected = editingUser.brandTags?.includes(brand.id) || false;
+                        return (
+                          <label
+                            key={brand.id}
+                            className={`flex items-center gap-3 p-3 rounded-lg border-2 cursor-pointer transition-all ${
+                              isSelected
+                                ? 'bg-[#f0f5ff] border-[#2a6ef0]'
+                                : 'bg-white border-[#e5e7eb] hover:border-[#d1d5dc]'
+                            }`}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={(e) => {
+                                const currentTags = editingUser.brandTags || [];
+                                if (e.target.checked) {
+                                  setEditingUser({
+                                    ...editingUser,
+                                    brandTags: [...currentTags, brand.id]
+                                  });
+                                } else {
+                                  setEditingUser({
+                                    ...editingUser,
+                                    brandTags: currentTags.filter(id => id !== brand.id)
+                                  });
+                                }
+                              }}
+                              className="size-4 text-[#2a6ef0] rounded border-[#d1d5dc] focus:ring-2 focus:ring-[#2a6ef0]"
+                            />
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2">
+                                <Tag className="size-4 text-[#2a6ef0]" />
+                                <span className="text-[#1f2937] text-sm font-medium">
+                                  {brand.name}
+                                </span>
+                              </div>
+                              {brand.description && (
+                                <p className="text-xs text-[#6b7280] mt-1">
+                                  {brand.description}
+                                </p>
+                              )}
+                            </div>
+                            {isSelected && (
+                              <div className="bg-[#2a6ef0] text-white px-2 py-1 rounded text-xs">
+                                Selected
+                              </div>
+                            )}
+                          </label>
+                        );
+                      })
+                    )}
+                  </div>
+
+                  {/* Selected Brands Summary */}
+                  {editingUser.brandTags && editingUser.brandTags.length > 0 && (
+                    <div className="mt-3 p-3 bg-[#f0f5ff] rounded-lg border border-[#2a6ef0]">
+                      <p className="text-xs text-[#6b7280] mb-2">Selected brands:</p>
+                      <div className="flex flex-wrap gap-2">
+                        {editingUser.brandTags.map((brandId) => {
+                          const brand = brands.find(b => b.id === brandId);
+                          return brand ? (
+                            <span
+                              key={brandId}
+                              className="inline-flex items-center gap-1 px-2 py-1 bg-white border border-[#2a6ef0] rounded-full text-xs text-[#2a6ef0]"
+                            >
+                              <Tag className="size-3" />
+                              {brand.name}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  setEditingUser({
+                                    ...editingUser,
+                                    brandTags: editingUser.brandTags?.filter(id => id !== brandId)
+                                  });
+                                }}
+                                className="ml-1 hover:text-[#ef4444]"
+                              >
+                                <X className="size-3" />
+                              </button>
+                            </span>
+                          ) : null;
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
 
               <div className="flex gap-3 pt-2">
                 <button

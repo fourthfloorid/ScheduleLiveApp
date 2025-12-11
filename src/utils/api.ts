@@ -159,6 +159,21 @@ export const userAPI = {
     return data.users || [];
   },
 
+  getBrands: async () => {
+    const response = await fetch(`${API_BASE_URL}/brands`, {
+      headers: getHeaders(),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      console.error('Get brands error:', error);
+      throw new Error(error.error || 'Failed to fetch brands');
+    }
+    
+    const data = await response.json();
+    return data.brands || [];
+  },
+
   update: async (id: string, userData: any) => {
     const response = await fetch(`${API_BASE_URL}/users/${id}`, {
       method: 'PUT',
