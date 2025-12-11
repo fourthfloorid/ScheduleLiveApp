@@ -1,4 +1,4 @@
-import { Home, Calendar, Tv, Tag, LogOut, X, Users, UserCircle } from 'lucide-react';
+import { Home, Calendar, Tv, Tag, LogOut, X, Users, UserCircle, CalendarCheck } from 'lucide-react';
 import { User } from '../App';
 import { Page } from './Dashboard';
 
@@ -17,6 +17,7 @@ export default function Sidebar({ user, currentPage, onNavigate, onLogout, isOpe
     { id: 'schedule' as Page, label: 'Schedule', icon: Calendar, roles: ['host', 'admin'] },
     { id: 'room' as Page, label: 'Room', icon: Tv, roles: ['host', 'admin'] },
     { id: 'brand' as Page, label: 'Brand', icon: Tag, roles: ['admin'] },
+    { id: 'brand-schedule' as Page, label: 'Brand Schedule', icon: CalendarCheck, roles: ['admin'] },
     { id: 'users' as Page, label: 'Users', icon: Users, roles: ['admin'] },
     { id: 'profile' as Page, label: 'Profile', icon: UserCircle, roles: ['host', 'admin'] },
   ];

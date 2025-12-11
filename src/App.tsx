@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Login from './imports/Login';
 import Dashboard from './components/Dashboard';
 import SignupModal from './components/SignupModal';
 import WelcomeGuide from './components/WelcomeGuide';
-import { authAPI, setAuthToken } from './utils/api';
+import { authAPI, setAuthToken, getAuthToken } from './utils/api';
+import { projectId, publicAnonKey } from './utils/supabase/info';
+import { createClient } from '@supabase/supabase-js';
 
 export type UserRole = 'host' | 'admin';
 
@@ -17,7 +19,44 @@ export interface User {
 function App() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showSignup, setShowSignup] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Check for existing session on mount
+  useEffect(() => {
+    const checkSession = async () => {
+      const token = getAuthToken();
+      if (token) {
+        try {
+          console.log('Found existing token, checking session...');
+          const supabase = createClient(
+            `https://${projectId}.supabase.co`,
+            publicAnonKey
+          );
+          
+          const { data: { user }, error } = await supabase.auth.getUser(token);
+          
+          if (user && !error) {
+            console.log('Session valid, restoring user:', user);
+            setCurrentUser({
+              id: user.id,
+              email: user.email || '',
+              role: user.user_metadata?.role || 'host',
+              name: user.user_metadata?.name || user.email || 'User'
+            });
+          } else {
+            console.log('Session invalid or expired, clearing token');
+            setAuthToken(null);
+          }
+        } catch (error) {
+          console.error('Session check error:', error);
+          setAuthToken(null);
+        }
+      }
+      setIsLoading(false);
+    };
+
+    checkSession();
+  }, []);
 
   const handleLogin = async (email: string, password: string) => {
     setIsLoading(true);
@@ -68,6 +107,18 @@ function App() {
   const handleUpdateUser = (updatedUser: User) => {
     setCurrentUser(updatedUser);
   };
+
+  // Show loading screen while checking session
+  if (isLoading && !currentUser) {
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-white">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!currentUser) {
     return (

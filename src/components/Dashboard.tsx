@@ -7,13 +7,14 @@ import HomePage from './pages/HomePage';
 import SchedulePage from './pages/SchedulePage';
 import RoomPage from './pages/RoomPage';
 import BrandPage from './pages/BrandPage';
+import { BrandSchedulePage } from './pages/BrandSchedulePage';
 import UserManagementPage from './pages/UserManagementPage';
 import ProfilePage from './pages/ProfilePage';
 import { useBrandStore } from '../store/brandStore';
 import { useRoomStore } from '../store/roomStore';
 import { useScheduleStore } from '../store/scheduleStore';
 
-export type Page = 'home' | 'schedule' | 'room' | 'brand' | 'users' | 'profile';
+export type Page = 'home' | 'schedule' | 'room' | 'brand' | 'brand-schedule' | 'users' | 'profile';
 
 interface DashboardProps {
   user: User;
@@ -50,6 +51,8 @@ export default function Dashboard({ user, onLogout, onUpdateUser }: DashboardPro
         return <RoomPage user={user} />;
       case 'brand':
         return <BrandPage user={user} />;
+      case 'brand-schedule':
+        return <BrandSchedulePage user={user} />;
       case 'users':
         return <UserManagementPage user={user} />;
       case 'profile':

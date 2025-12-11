@@ -2,10 +2,16 @@ import { projectId, publicAnonKey } from './supabase/info';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-df75f45f`;
 
-let authToken: string | null = null;
+// Initialize token from localStorage on load
+let authToken: string | null = localStorage.getItem('access_token');
 
 export const setAuthToken = (token: string | null) => {
   authToken = token;
+  if (token) {
+    localStorage.setItem('access_token', token);
+  } else {
+    localStorage.removeItem('access_token');
+  }
 };
 
 export const getAuthToken = () => authToken;

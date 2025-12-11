@@ -505,12 +505,25 @@ export default function RoomPage({ user }: RoomPageProps) {
                 {/* Room Header */}
                 <div className="p-6 bg-[#f9fafb] border-b border-[#e5e7eb]">
                   <div className="flex items-start justify-between">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1">
                       <div className="bg-[#2a6ef0] p-3 rounded-lg">
                         <Tv className="size-6 text-white" />
                       </div>
-                      <div>
-                        <h2 className="text-[#1f2937]">{room.name}</h2>
+                      <div className="flex-1">
+                        <div className="flex items-center gap-3 mb-1">
+                          <h2 className="text-[#1f2937]">{room.name}</h2>
+                          {roomAssignments.length === 0 ? (
+                            <span className="px-3 py-1 bg-[#dcfce7] text-[#16a34a] text-xs rounded-full flex items-center gap-1.5">
+                              <span className="w-2 h-2 bg-[#16a34a] rounded-full animate-pulse"></span>
+                              Available 24/7
+                            </span>
+                          ) : (
+                            <span className="px-3 py-1 bg-[#fef3c7] text-[#f59e0b] text-xs rounded-full flex items-center gap-1.5">
+                              <Clock className="size-3" />
+                              {roomAssignments.length} scheduled
+                            </span>
+                          )}
+                        </div>
                         <p className="text-[#6b7280] text-sm">{room.description}</p>
                       </div>
                     </div>

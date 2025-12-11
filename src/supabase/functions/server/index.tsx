@@ -132,11 +132,13 @@ const verifyAuth = async (c: any, next: any) => {
 // Brand endpoints
 app.get("/make-server-df75f45f/brands", verifyAuth, async (c) => {
   try {
+    console.log('GET /brands - Request received');
     const brands = await kv.getByPrefix('brand:');
+    console.log(`Found ${brands.length} brands`);
     return c.json({ brands });
   } catch (error) {
     console.log(`Get brands error: ${error}`);
-    return c.json({ error: 'Failed to fetch brands' }, 500);
+    return c.json({ error: 'Failed to fetch brands', details: String(error) }, 500);
   }
 });
 
@@ -642,7 +644,7 @@ function isTimeSlotAvailable(
 
 /**
  * Validates if requested time slots match host's availability
- * All requested slots must be in the host's available schedule
+ * At least one requested slot must be in the host's available schedule
  */
 function areTimeSlotsAvailableForHost(
   hostSchedules: any[],
@@ -659,8 +661,9 @@ function areTimeSlotsAvailableForHost(
     return false; // Host has no availability for this date
   }
   
-  // Check if ALL requested time slots are in host's available slots
-  return requestedTimeSlots.every(slot => 
+  // Check if at least ONE requested time slot is in host's available slots
+  // This allows hosts to be shown even if they can't cover all slots
+  return requestedTimeSlots.some(slot => 
     hostSchedule.timeSlots.includes(slot)
   );
 }
@@ -931,6 +934,268 @@ app.get("/make-server-df75f45f/room-availability/:roomId/:date", verifyAuth, asy
   } catch (error) {
     console.log(`Get room availability error: ${error}`);
     return c.json({ error: 'Failed to fetch room availability' }, 500);
+  }
+});
+
+// ============================================================================
+// BRAND SCHEDULE ENDPOINTS
+// Brand schedules define recurring time slots for brands (template/pattern)
+// ============================================================================
+
+// Get all brand schedules
+app.get("/make-server-df75f45f/brand-schedules", verifyAuth, async (c) => {
+  try {
+    console.log('GET /brand-schedules - Request received');
+    const user = c.get('user');
+    console.log('User role:', user.user_metadata?.role);
+    
+    if (user.user_metadata?.role !== 'admin') {
+      console.log('Access denied: Not an admin');
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const brandSchedules = await kv.getByPrefix('brand-schedule:');
+    console.log(`Found ${brandSchedules.length} brand schedules`);
+    return c.json({ brandSchedules });
+  } catch (error) {
+    console.log(`Get brand schedules error: ${error}`);
+    return c.json({ error: 'Failed to fetch brand schedules', details: String(error) }, 500);
+  }
+});
+
+// Create brand schedule
+app.post("/make-server-df75f45f/brand-schedules", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const { brandId, brandName, daysOfWeek, timeSlots } = await c.req.json();
+    
+    if (!brandId || !brandName || !daysOfWeek || !Array.isArray(daysOfWeek) || !timeSlots || !Array.isArray(timeSlots)) {
+      return c.json({ error: 'brandId, brandName, daysOfWeek, and timeSlots are required' }, 400);
+    }
+
+    const id = `brand-schedule:${brandId}:${Date.now()}`;
+    const brandSchedule = {
+      id,
+      brandId,
+      brandName,
+      daysOfWeek, // e.g., ['Monday', 'Tuesday', 'Wednesday']
+      timeSlots, // e.g., ['09:00', '10:00', '11:00']
+      createdAt: new Date().toISOString(),
+      createdBy: user.id,
+    };
+    
+    await kv.set(id, brandSchedule);
+    return c.json({ brandSchedule });
+  } catch (error) {
+    console.log(`Create brand schedule error: ${error}`);
+    return c.json({ error: 'Failed to create brand schedule' }, 500);
+  }
+});
+
+// Update brand schedule
+app.put("/make-server-df75f45f/brand-schedules/:id", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const id = c.req.param('id');
+    const { brandId, brandName, daysOfWeek, timeSlots } = await c.req.json();
+    
+    const brandSchedule = {
+      id,
+      brandId,
+      brandName,
+      daysOfWeek,
+      timeSlots,
+      updatedAt: new Date().toISOString(),
+    };
+    
+    await kv.set(id, brandSchedule);
+    return c.json({ brandSchedule });
+  } catch (error) {
+    console.log(`Update brand schedule error: ${error}`);
+    return c.json({ error: 'Failed to update brand schedule' }, 500);
+  }
+});
+
+// Delete brand schedule
+app.delete("/make-server-df75f45f/brand-schedules/:id", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const id = c.req.param('id');
+    await kv.del(id);
+    return c.json({ success: true });
+  } catch (error) {
+    console.log(`Delete brand schedule error: ${error}`);
+    return c.json({ error: 'Failed to delete brand schedule' }, 500);
+  }
+});
+
+/**
+ * Match brand schedule with available rooms and hosts for a specific date
+ * Returns rooms that are available and hosts that match the schedule
+ */
+app.post("/make-server-df75f45f/match-brand-schedule", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    if (user.user_metadata?.role !== 'admin') {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    const { brandScheduleId, date } = await c.req.json();
+    
+    if (!brandScheduleId || !date) {
+      return c.json({ error: 'brandScheduleId and date are required' }, 400);
+    }
+
+    // Get brand schedule
+    const brandSchedule = await kv.get(brandScheduleId);
+    if (!brandSchedule) {
+      return c.json({ error: 'Brand schedule not found' }, 404);
+    }
+
+    // Check if date matches one of the scheduled days
+    const dateObj = new Date(date + 'T00:00:00');
+    const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()];
+    
+    if (!brandSchedule.daysOfWeek.includes(dayOfWeek)) {
+      return c.json({
+        error: 'Date does not match brand schedule',
+        message: `This brand schedule is only for: ${brandSchedule.daysOfWeek.join(', ')}. Selected date is ${dayOfWeek}.`,
+        dayOfWeek,
+        scheduledDays: brandSchedule.daysOfWeek
+      }, 400);
+    }
+
+    // Get all rooms, assignments, schedules, and hosts
+    const [allRooms, allAssignments, allSchedules] = await Promise.all([
+      kv.getByPrefix('room:'),
+      kv.getByPrefix('assignment:'),
+      kv.getByPrefix('schedule:')
+    ]);
+
+    const { data: { users }, error: usersError } = await supabase.auth.admin.listUsers();
+    if (usersError) {
+      return c.json({ error: 'Failed to fetch users' }, 500);
+    }
+
+    const hosts = users.filter(u => u.user_metadata?.role === 'host');
+
+    // Find available rooms (rooms with no conflicting assignments)
+    const availableRooms = allRooms.map(room => {
+      const roomAssignments = allAssignments.filter((a: any) => 
+        a.roomId === room.id && a.date === date
+      );
+
+      const occupiedSlots = new Set<string>();
+      roomAssignments.forEach((assignment: any) => {
+        assignment.timeSlots.forEach((slot: string) => occupiedSlots.add(slot));
+      });
+
+      const availableSlots = brandSchedule.timeSlots.filter(
+        (slot: string) => !occupiedSlots.has(slot)
+      );
+
+      return {
+        ...room,
+        occupiedSlots: Array.from(occupiedSlots),
+        availableSlots,
+        isFullyAvailable: availableSlots.length === brandSchedule.timeSlots.length,
+        currentAssignments: roomAssignments
+      };
+    }).filter(room => room.availableSlots.length > 0); // Only show rooms with at least some availability
+
+    // Find available hosts
+    const availableHosts = hosts.filter(host => {
+      const hostBrandTags = host.user_metadata?.brandTags || [];
+      
+      // Check brand compatibility
+      if (!isHostBrandCompatible(hostBrandTags, brandSchedule.brandId)) {
+        console.log(`Host ${host.user_metadata?.name} filtered out: brand incompatible`);
+        return false;
+      }
+
+      // Check if host has availability for the date and time slots
+      if (!areTimeSlotsAvailableForHost(allSchedules, host.id, date, brandSchedule.timeSlots)) {
+        console.log(`Host ${host.user_metadata?.name} filtered out: no matching time slots`);
+        return false;
+      }
+
+      // Check if host is not already assigned at these times
+      const hasConflict = allAssignments.some((assignment: any) => {
+        return (
+          assignment.hostId === host.id &&
+          assignment.date === date &&
+          assignment.timeSlots.some((slot: string) => brandSchedule.timeSlots.includes(slot))
+        );
+      });
+
+      if (hasConflict) {
+        console.log(`Host ${host.user_metadata?.name} filtered out: time slot conflict`);
+      }
+
+      return !hasConflict;
+    }).map(host => {
+      const hostSchedule = allSchedules.find((s: any) => 
+        s.hostId === host.id && s.date === date
+      );
+
+      // Get all time slots that the host has already booked on this date
+      const hostBookedSlots = allAssignments
+        .filter((a: any) => a.hostId === host.id && a.date === date)
+        .flatMap((a: any) => a.timeSlots);
+
+      // Filter out booked slots from host's available slots
+      const availableSlots = (hostSchedule?.timeSlots || []).filter(
+        (slot: string) => !hostBookedSlots.includes(slot)
+      );
+
+      const matchingSlots = brandSchedule.timeSlots.filter((slot: string) => 
+        availableSlots.includes(slot)
+      );
+
+      console.log(`Host ${host.user_metadata?.name}: availableSlots=${availableSlots.join(',')}, matchingSlots=${matchingSlots.join(',')}`);
+
+      return {
+        id: host.id,
+        email: host.email,
+        name: host.user_metadata?.name || host.email,
+        brandTags: host.user_metadata?.brandTags || [],
+        availableSlots,
+        matchingSlots,
+        isFullyAvailable: matchingSlots.length === brandSchedule.timeSlots.length
+      };
+    });
+
+    console.log(`Match brand schedule: Found ${availableHosts.length} available hosts out of ${hosts.length} total hosts`);
+
+    return c.json({
+      brandSchedule,
+      date,
+      dayOfWeek,
+      availableRooms,
+      availableHosts,
+      summary: {
+        totalRooms: availableRooms.length,
+        fullyAvailableRooms: availableRooms.filter(r => r.isFullyAvailable).length,
+        totalHosts: availableHosts.length,
+        fullyAvailableHosts: availableHosts.filter(h => h.isFullyAvailable).length
+      }
+    });
+
+  } catch (error) {
+    console.log(`Match brand schedule error: ${error}`);
+    return c.json({ error: 'Failed to match brand schedule', details: String(error) }, 500);
   }
 });
 
