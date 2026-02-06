@@ -9,7 +9,7 @@ import RoomPage from './pages/RoomPage';
 import BrandPage from './pages/BrandPage';
 import { BrandSchedulePage } from './pages/BrandSchedulePage';
 import UserManagementPage from './pages/UserManagementPage';
-import ProfilePage from './pages/ProfilePage';
+import { ProfilePage } from './pages/ProfilePage';
 import { useBrandStore } from '../store/brandStore';
 import { useRoomStore } from '../store/roomStore';
 import { useScheduleStore } from '../store/scheduleStore';
@@ -69,6 +69,7 @@ export default function Dashboard({ user, onLogout, onUpdateUser }: DashboardPro
         user={user}
         currentPage={currentPage}
         onLogout={onLogout}
+        onNavigate={handleNavigate}
       />
       
       {/* Sidebar - Hidden on mobile, shown on desktop */}

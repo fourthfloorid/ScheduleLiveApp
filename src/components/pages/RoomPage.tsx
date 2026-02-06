@@ -20,6 +20,7 @@ interface Room {
   id: string;
   name: string;
   description: string;
+  isActive?: boolean;
 }
 
 interface Brand {
@@ -235,6 +236,21 @@ export default function RoomPage({ user }: RoomPageProps) {
       await fetchData();
     } catch (error: any) {
       alert(error.message || 'Failed to delete room');
+    }
+  };
+
+  // Toggle room active status
+  const handleToggleRoomStatus = async (room: Room) => {
+    try {
+      const newStatus = !room.isActive;
+      await roomAPI.update(room.id, {
+        name: room.name,
+        description: room.description,
+        isActive: newStatus
+      });
+      await fetchData();
+    } catch (error: any) {
+      alert(error.message || 'Failed to update room status');
     }
   };
 
@@ -510,11 +526,26 @@ export default function RoomPage({ user }: RoomPageProps) {
                         <Tv className="size-6 text-white" />
                       </div>
                       <div className="flex-1">
-                        <div className="flex items-center gap-3 mb-1">
+                        <div className="flex items-center gap-3 mb-1 flex-wrap">
                           <h2 className="text-[#1f2937]">{room.name}</h2>
-                          {roomAssignments.length === 0 ? (
+                          
+                          {/* Active/Inactive Status Badge */}
+                          {room.isActive !== false ? (
                             <span className="px-3 py-1 bg-[#dcfce7] text-[#16a34a] text-xs rounded-full flex items-center gap-1.5">
-                              <span className="w-2 h-2 bg-[#16a34a] rounded-full animate-pulse"></span>
+                              <span className="w-2 h-2 bg-[#16a34a] rounded-full"></span>
+                              Active
+                            </span>
+                          ) : (
+                            <span className="px-3 py-1 bg-[#fee2e2] text-[#ef4444] text-xs rounded-full flex items-center gap-1.5">
+                              <span className="w-2 h-2 bg-[#ef4444] rounded-full"></span>
+                              Inactive
+                            </span>
+                          )}
+                          
+                          {/* Availability Badge */}
+                          {roomAssignments.length === 0 ? (
+                            <span className="px-3 py-1 bg-[#f0f5ff] text-[#2a6ef0] text-xs rounded-full flex items-center gap-1.5">
+                              <span className="w-2 h-2 bg-[#2a6ef0] rounded-full animate-pulse"></span>
                               Available 24/7
                             </span>
                           ) : (
@@ -525,18 +556,51 @@ export default function RoomPage({ user }: RoomPageProps) {
                           )}
                         </div>
                         <p className="text-[#6b7280] text-sm">{room.description}</p>
+                        
+                        {/* Inactive Room Notice */}
+                        {room.isActive === false && (
+                          <div className="mt-2 p-2 bg-[#fef2f2] border border-[#fecaca] rounded text-xs text-[#991b1b] flex items-center gap-1">
+                            <AlertCircle className="size-3" />
+                            This room is currently inactive (under maintenance or unavailable)
+                          </div>
+                        )}
                       </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex gap-2 items-start">
+                      {/* Toggle Active/Inactive Button */}
+                      <button
+                        onClick={() => handleToggleRoomStatus(room)}
+                        className={`px-3 py-1.5 text-xs rounded-lg transition-colors flex items-center gap-1.5 ${
+                          room.isActive !== false
+                            ? 'bg-[#fef2f2] text-[#ef4444] hover:bg-[#fee2e2]'
+                            : 'bg-[#dcfce7] text-[#16a34a] hover:bg-[#bbf7d0]'
+                        }`}
+                        title={room.isActive !== false ? 'Set as inactive' : 'Set as active'}
+                      >
+                        {room.isActive !== false ? (
+                          <>
+                            <span className="size-2 bg-[#ef4444] rounded-full"></span>
+                            Set Inactive
+                          </>
+                        ) : (
+                          <>
+                            <span className="size-2 bg-[#16a34a] rounded-full"></span>
+                            Set Active
+                          </>
+                        )}
+                      </button>
+                      
                       <button
                         onClick={() => handleEditRoom(room)}
                         className="p-2 text-[#2a6ef0] hover:bg-[#f0f5ff] rounded-lg transition-colors"
+                        title="Edit room"
                       >
                         <Edit2 className="size-4" />
                       </button>
                       <button
                         onClick={() => handleDeleteRoom(room.id)}
                         className="p-2 text-[#ef4444] hover:bg-[#fef2f2] rounded-lg transition-colors"
+                        title="Delete room"
                       >
                         <Trash2 className="size-4" />
                       </button>

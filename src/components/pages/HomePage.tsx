@@ -45,8 +45,8 @@ export default function HomePage({ user }: HomePageProps) {
   const hostAssignments = user.role === 'host' ? getHostAssignments() : [];
 
   // Stats calculations
-  const totalAvailable = userAvailability.reduce((sum, s) => sum + s.availableSessions, 0);
-  const totalAssigned = userAvailability.reduce((sum, s) => sum + s.assignedSessions, 0);
+  const totalAvailable = userAvailability.reduce((sum, s) => sum + (s.availableSessions || 0), 0);
+  const totalAssigned = userAvailability.reduce((sum, s) => sum + (s.assignedSessions || 0), 0);
   
   const weekStart = startOfWeek(new Date(), { weekStartsOn: 0 });
   const weekEnd = endOfWeek(new Date(), { weekStartsOn: 0 });
@@ -56,7 +56,7 @@ export default function HomePage({ user }: HomePageProps) {
     return scheduleDate >= weekStart && scheduleDate <= weekEnd;
   });
   
-  const thisWeekAvailable = weekAvailability.reduce((sum, s) => sum + s.availableSessions, 0);
+  const thisWeekAvailable = weekAvailability.reduce((sum, s) => sum + (s.availableSessions || 0), 0);
 
   // Generate week dates starting from today
   const generateWeekDates = () => {
@@ -189,7 +189,7 @@ export default function HomePage({ user }: HomePageProps) {
               </div>
               <p className="text-[#6b7280] mb-1 text-sm md:text-base">Available</p>
               <p className="text-[#1f2937]">
-                {schedules.reduce((sum, s) => sum + s.availableSessions, 0)}
+                {schedules.reduce((sum, s) => sum + (s.availableSessions || 0), 0)}
               </p>
             </div>
 
@@ -289,13 +289,13 @@ export default function HomePage({ user }: HomePageProps) {
               <div className="flex justify-between items-center py-3 border-b border-[#f3f4f6]">
                 <span className="text-[#6b7280] text-sm md:text-base">Total Available Sessions</span>
                 <span className="text-[#1f2937]">
-                  {schedules.reduce((sum, s) => sum + s.availableSessions, 0)}
+                  {schedules.reduce((sum, s) => sum + (s.availableSessions || 0), 0)}
                 </span>
               </div>
               <div className="flex justify-between items-center py-3">
                 <span className="text-[#6b7280] text-sm md:text-base">Total Assigned Sessions</span>
                 <span className="text-[#1f2937]">
-                  {schedules.reduce((sum, s) => sum + s.assignedSessions, 0)}
+                  {schedules.reduce((sum, s) => sum + (s.assignedSessions || 0), 0)}
                 </span>
               </div>
             </>

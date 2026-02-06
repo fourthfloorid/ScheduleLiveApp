@@ -3,7 +3,8 @@ import { projectId, publicAnonKey } from './supabase/info';
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-df75f45f`;
 
 // Initialize token from localStorage on load
-let authToken: string | null = localStorage.getItem('access_token');
+const storedToken = localStorage.getItem('access_token');
+let authToken: string | null = storedToken && storedToken !== 'null' && storedToken !== 'undefined' ? storedToken : null;
 
 export const setAuthToken = (token: string | null) => {
   authToken = token;
@@ -16,10 +17,13 @@ export const setAuthToken = (token: string | null) => {
 
 export const getAuthToken = () => authToken;
 
-const getHeaders = () => ({
-  'Content-Type': 'application/json',
-  'Authorization': `Bearer ${authToken || publicAnonKey}`,
-});
+const getHeaders = () => {
+  const token = authToken || publicAnonKey;
+  return {
+    'Content-Type': 'application/json',
+    'Authorization': `Bearer ${token}`,
+  };
+};
 
 // Auth API
 export const authAPI = {

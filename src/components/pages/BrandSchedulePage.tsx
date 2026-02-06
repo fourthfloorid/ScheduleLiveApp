@@ -60,8 +60,9 @@ interface BrandSchedulePageProps {
 const DAYS_OF_WEEK = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 
 const TIME_SLOTS = [
-  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00',
-  '15:00', '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00'
+  '00:00', '01:00', '02:00', '03:00', '04:00', '05:00', '06:00', '07:00',
+  '08:00', '09:00', '10:00', '11:00', '12:00', '13:00', '14:00', '15:00',
+  '16:00', '17:00', '18:00', '19:00', '20:00', '21:00', '22:00', '23:00'
 ];
 
 export function BrandSchedulePage({ user }: BrandSchedulePageProps) {
@@ -233,6 +234,14 @@ export function BrandSchedulePage({ user }: BrandSchedulePageProps) {
 
     try {
       const token = localStorage.getItem('access_token');
+      
+      // Get the selected schedule to show info
+      const selectedSchedule = brandSchedules.find(s => s.id === matchingScheduleId);
+      console.log('Selected brand schedule:', selectedSchedule);
+      console.log('Selected date:', matchingDate);
+      console.log('Date object:', new Date(matchingDate + 'T00:00:00'));
+      console.log('Day of week:', new Date(matchingDate + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'long' }));
+      
       const res = await fetch(`https://${projectId}.supabase.co/functions/v1/make-server-df75f45f/match-brand-schedule`, {
         method: 'POST',
         headers: {
@@ -246,9 +255,13 @@ export function BrandSchedulePage({ user }: BrandSchedulePageProps) {
       });
 
       const data = await res.json();
+      console.log('Match response:', data);
 
       if (!res.ok) {
-        throw new Error(data.error || data.message || 'Failed to match schedule');
+        // Show more detailed error message
+        const errorMsg = data.message || data.error || 'Failed to match schedule';
+        console.error('Match error response:', data);
+        throw new Error(errorMsg);
       }
 
       setMatchResult(data);

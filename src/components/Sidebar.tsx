@@ -1,4 +1,4 @@
-import { Home, Calendar, Tv, Tag, LogOut, X, Users, UserCircle, CalendarCheck } from 'lucide-react';
+import { Home, Calendar, Tv, Tag, LogOut, X, Users, UserCircle, CalendarCheck, User as UserIcon } from 'lucide-react';
 import { User } from '../App';
 import { Page } from './Dashboard';
 
@@ -33,10 +33,31 @@ export default function Sidebar({ user, currentPage, onNavigate, onLogout, isOpe
         w-64 bg-white border-r border-[#e5e7eb] flex-col
       `}
     >
+      {/* User Profile Header */}
       <div className="p-6 border-b border-[#e5e7eb]">
-        <h1 className="text-[#2a6ef0] mb-2">Live Schedule</h1>
-        <p className="text-[#6b7280]">{user.name}</p>
-        <p className="text-[#9ca3af] capitalize">{user.role}</p>
+        <button
+          onClick={() => onNavigate('profile')}
+          className="w-full mb-4 flex items-center gap-3 p-3 rounded-lg hover:bg-[#f3f4f6] transition-colors"
+        >
+          <div className="w-12 h-12 rounded-full overflow-hidden bg-[#f3f4f6] border-2 border-white shadow-sm flex-shrink-0">
+            {user.photoUrl ? (
+              <img
+                src={user.photoUrl}
+                alt={user.name}
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                <UserIcon className="w-6 h-6 text-[#9ca3af]" />
+              </div>
+            )}
+          </div>
+          <div className="flex-1 text-left min-w-0">
+            <p className="text-[#1f2937] truncate">{user.name}</p>
+            <p className="text-[#9ca3af] text-sm capitalize">{user.role}</p>
+          </div>
+        </button>
+        <h1 className="text-[#2a6ef0]">Live Schedule</h1>
       </div>
       
       <nav className="flex-1 p-4 overflow-y-auto">

@@ -27,6 +27,12 @@ const supabase = createClient(
   Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!,
 );
 
+// Initialize Supabase client for auth operations (uses ANON_KEY)
+const supabaseAuth = createClient(
+  Deno.env.get('SUPABASE_URL')!,
+  Deno.env.get('SUPABASE_ANON_KEY')!,
+);
+
 // Health check endpoint
 app.get("/make-server-df75f45f/health", (c) => {
   return c.json({ 
@@ -81,7 +87,7 @@ app.post("/make-server-df75f45f/auth/signin", async (c) => {
       return c.json({ error: 'Email and password are required' }, 400);
     }
     
-    const { data, error } = await supabase.auth.signInWithPassword({
+    const { data, error } = await supabaseAuth.signInWithPassword({
       email,
       password,
     });
@@ -101,6 +107,36 @@ app.post("/make-server-df75f45f/auth/signin", async (c) => {
     return c.json({ error: String(error) }, 500);
   }
 });
+
+// Initialize profile photos bucket
+async function ensureProfilePhotosBucketExists() {
+  const bucketName = 'make-df75f45f-profile-photos';
+  
+  try {
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some(bucket => bucket.name === bucketName);
+    
+    if (!bucketExists) {
+      console.log('Creating profile photos bucket...');
+      const { error } = await supabase.storage.createBucket(bucketName, {
+        public: false, // Private bucket for security
+        fileSizeLimit: 5242880, // 5MB limit
+        allowedMimeTypes: ['image/png', 'image/jpeg', 'image/jpg', 'image/webp']
+      });
+      
+      if (error) {
+        console.error('Error creating bucket:', error);
+      } else {
+        console.log('Profile photos bucket created successfully');
+      }
+    }
+  } catch (error) {
+    console.error('Error checking/creating bucket:', error);
+  }
+}
+
+// Initialize bucket on server start
+ensureProfilePhotosBucketExists();
 
 // Middleware to verify authentication
 const verifyAuth = async (c: any, next: any) => {
@@ -128,6 +164,150 @@ const verifyAuth = async (c: any, next: any) => {
   c.set('user', user);
   await next();
 };
+
+// Upload profile photo endpoint
+app.post("/make-server-df75f45f/profile/upload-photo", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const body = await c.req.json();
+    const { photo, fileName, fileType } = body;
+    
+    if (!photo || !fileName || !fileType) {
+      return c.json({ error: 'Missing required fields' }, 400);
+    }
+    
+    // Validate file type
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    if (!allowedTypes.includes(fileType)) {
+      return c.json({ error: 'Invalid file type. Only PNG, JPEG, JPG, and WEBP are allowed' }, 400);
+    }
+    
+    // Decode base64 to buffer
+    const binaryString = atob(photo);
+    const bytes = new Uint8Array(binaryString.length);
+    for (let i = 0; i < binaryString.length; i++) {
+      bytes[i] = binaryString.charCodeAt(i);
+    }
+    
+    // Validate file size (5MB max)
+    if (bytes.length > 5 * 1024 * 1024) {
+      return c.json({ error: 'File size exceeds 5MB limit' }, 400);
+    }
+    
+    const bucketName = 'make-df75f45f-profile-photos';
+    const fileExt = fileName.split('.').pop();
+    const newFileName = `${user.id}-${Date.now()}.${fileExt}`;
+    
+    // Delete old photo if exists
+    const oldPhotoUrl = user.user_metadata?.photoUrl;
+    if (oldPhotoUrl) {
+      try {
+        // Extract filename from signed URL
+        const urlParts = oldPhotoUrl.split('/');
+        const filePathPart = urlParts.find(part => part.includes(user.id));
+        if (filePathPart) {
+          const oldFileName = filePathPart.split('?')[0];
+          await supabase.storage.from(bucketName).remove([oldFileName]);
+        }
+      } catch (err) {
+        console.log('Could not delete old photo:', err);
+      }
+    }
+    
+    // Upload new photo
+    const { data: uploadData, error: uploadError } = await supabase.storage
+      .from(bucketName)
+      .upload(newFileName, bytes, {
+        contentType: fileType,
+        upsert: false
+      });
+    
+    if (uploadError) {
+      console.error('Upload error:', uploadError);
+      return c.json({ error: 'Failed to upload photo', details: uploadError.message }, 500);
+    }
+    
+    // Generate signed URL (valid for 1 year)
+    const { data: urlData, error: urlError } = await supabase.storage
+      .from(bucketName)
+      .createSignedUrl(newFileName, 31536000); // 1 year
+    
+    if (urlError) {
+      console.error('URL generation error:', urlError);
+      return c.json({ error: 'Failed to generate photo URL', details: urlError.message }, 500);
+    }
+    
+    // Update user metadata with photo URL
+    const { data: updateData, error: updateError } = await supabase.auth.admin.updateUserById(
+      user.id,
+      {
+        user_metadata: {
+          ...user.user_metadata,
+          photoUrl: urlData.signedUrl
+        }
+      }
+    );
+    
+    if (updateError) {
+      console.error('User update error:', updateError);
+      return c.json({ error: 'Failed to update user profile', details: updateError.message }, 500);
+    }
+    
+    return c.json({ 
+      photoUrl: urlData.signedUrl,
+      user: updateData.user
+    });
+  } catch (error) {
+    console.error('Upload photo error:', error);
+    return c.json({ error: 'Failed to upload photo', details: String(error) }, 500);
+  }
+});
+
+// Update user profile endpoint
+app.put("/make-server-df75f45f/profile", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    const { name, brandTags } = await c.req.json();
+    
+    const updatedMetadata = {
+      ...user.user_metadata,
+    };
+    
+    if (name !== undefined) {
+      updatedMetadata.name = name;
+    }
+    
+    if (brandTags !== undefined) {
+      updatedMetadata.brandTags = brandTags;
+    }
+    
+    const { data, error } = await supabase.auth.admin.updateUserById(
+      user.id,
+      { user_metadata: updatedMetadata }
+    );
+    
+    if (error) {
+      console.error('Profile update error:', error);
+      return c.json({ error: 'Failed to update profile' }, 500);
+    }
+    
+    return c.json({ user: data.user });
+  } catch (error) {
+    console.error('Update profile error:', error);
+    return c.json({ error: 'Failed to update profile', details: String(error) }, 500);
+  }
+});
+
+// Get current user profile endpoint
+app.get("/make-server-df75f45f/profile", verifyAuth, async (c) => {
+  try {
+    const user = c.get('user');
+    return c.json({ user });
+  } catch (error) {
+    console.error('Get profile error:', error);
+    return c.json({ error: 'Failed to get profile' }, 500);
+  }
+});
 
 // Brand endpoints
 app.get("/make-server-df75f45f/brands", verifyAuth, async (c) => {
@@ -216,7 +396,13 @@ app.post("/make-server-df75f45f/rooms", verifyAuth, async (c) => {
 
     const { name, description, assignments } = await c.req.json();
     const id = `room:${Date.now()}`;
-    const room = { id, name, description, assignments: assignments || [] };
+    const room = { 
+      id, 
+      name, 
+      description, 
+      assignments: assignments || [],
+      isActive: true // Default room is active when created
+    };
     
     await kv.set(id, room);
     return c.json({ room });
@@ -234,8 +420,14 @@ app.put("/make-server-df75f45f/rooms/:id", verifyAuth, async (c) => {
     }
 
     const id = c.req.param('id');
-    const { name, description, assignments } = await c.req.json();
-    const room = { id, name, description, assignments };
+    const { name, description, assignments, isActive } = await c.req.json();
+    const room = { 
+      id, 
+      name, 
+      description, 
+      assignments,
+      isActive: isActive !== undefined ? isActive : true // Preserve or default to true
+    };
     
     await kv.set(id, room);
     return c.json({ room });
@@ -1067,6 +1259,9 @@ app.post("/make-server-df75f45f/match-brand-schedule", verifyAuth, async (c) => 
     // Check if date matches one of the scheduled days
     const dateObj = new Date(date + 'T00:00:00');
     const dayOfWeek = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][dateObj.getDay()];
+    
+    console.log(`Match brand schedule - Date: ${date}, Parsed date: ${dateObj.toISOString()}, Day of week: ${dayOfWeek}`);
+    console.log(`Brand schedule days: ${brandSchedule.daysOfWeek.join(', ')}`);
     
     if (!brandSchedule.daysOfWeek.includes(dayOfWeek)) {
       return c.json({

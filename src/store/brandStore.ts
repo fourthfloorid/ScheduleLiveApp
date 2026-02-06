@@ -26,8 +26,8 @@ export const useBrandStore = create<BrandStore>((set, get) => ({
       const brands = await brandAPI.getAll();
       set({ brands, loading: false });
     } catch (error) {
-      console.error('Fetch brands error:', error);
-      set({ loading: false });
+      console.error('Failed to fetch brands:', error);
+      set({ loading: false, brands: [] });
     }
   },
   

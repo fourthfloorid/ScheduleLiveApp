@@ -14,6 +14,7 @@ export interface User {
   email: string;
   role: UserRole;
   name: string;
+  photoUrl?: string;
 }
 
 function App() {
@@ -41,7 +42,8 @@ function App() {
               id: user.id,
               email: user.email || '',
               role: user.user_metadata?.role || 'host',
-              name: user.user_metadata?.name || user.email || 'User'
+              name: user.user_metadata?.name || user.email || 'User',
+              photoUrl: user.user_metadata?.photoUrl
             });
           } else {
             console.log('Session invalid or expired, clearing token');
@@ -75,7 +77,8 @@ function App() {
         id: user.id,
         email: user.email || '',
         role: user.user_metadata?.role || 'host',
-        name: user.user_metadata?.name || user.email || 'User'
+        name: user.user_metadata?.name || user.email || 'User',
+        photoUrl: user.user_metadata?.photoUrl
       });
     } catch (error: any) {
       console.error('Login error:', error);
