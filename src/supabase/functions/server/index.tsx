@@ -87,7 +87,7 @@ app.post("/make-server-df75f45f/auth/signin", async (c) => {
       return c.json({ error: 'Email and password are required' }, 400);
     }
     
-    const { data, error } = await supabaseAuth.signInWithPassword({
+    const { data, error } = await supabaseAuth.auth.signInWithPassword({
       email,
       password,
     });

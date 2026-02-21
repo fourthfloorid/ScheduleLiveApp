@@ -3,6 +3,7 @@ import Login from './imports/Login';
 import Dashboard from './components/Dashboard';
 import SignupModal from './components/SignupModal';
 import WelcomeGuide from './components/WelcomeGuide';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { authAPI, setAuthToken, getAuthToken } from './utils/api';
 import { projectId, publicAnonKey } from './utils/supabase/info';
 import { createClient } from '@supabase/supabase-js';
@@ -17,17 +18,18 @@ export interface User {
   photoUrl?: string;
 }
 
-function App() {
+function AppContent() {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showSignup, setShowSignup] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   // Check for existing session on mount
   useEffect(() => {
     const checkSession = async () => {
-      const token = getAuthToken();
-      if (token) {
-        try {
+      try {
+        const token = getAuthToken();
+        if (token) {
           console.log('Found existing token, checking session...');
           const supabase = createClient(
             `https://${projectId}.supabase.co`,
@@ -49,12 +51,14 @@ function App() {
             console.log('Session invalid or expired, clearing token');
             setAuthToken(null);
           }
-        } catch (error) {
-          console.error('Session check error:', error);
-          setAuthToken(null);
         }
+      } catch (error) {
+        console.error('Session check error:', error);
+        setAuthToken(null);
+        setError('Failed to restore session. Please login again.');
+      } finally {
+        setIsLoading(false);
       }
-      setIsLoading(false);
     };
 
     checkSession();
@@ -148,4 +152,10 @@ function App() {
   return <Dashboard user={currentUser} onLogout={handleLogout} onUpdateUser={handleUpdateUser} />;
 }
 
-export default App;
+export default function App() {
+  return (
+    <ErrorBoundary>
+      <AppContent />
+    </ErrorBoundary>
+  );
+}

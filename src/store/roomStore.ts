@@ -36,7 +36,8 @@ export const useRoomStore = create<RoomStore>((set, get) => ({
       set({ rooms, loading: false });
     } catch (error) {
       console.error('Fetch rooms error:', error);
-      set({ loading: false });
+      // Don't throw, just set empty state
+      set({ loading: false, rooms: [] });
     }
   },
   

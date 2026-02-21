@@ -2,16 +2,25 @@ import { projectId, publicAnonKey } from './supabase/info';
 
 const API_BASE_URL = `https://${projectId}.supabase.co/functions/v1/make-server-df75f45f`;
 
-// Initialize token from localStorage on load
-const storedToken = localStorage.getItem('access_token');
-let authToken: string | null = storedToken && storedToken !== 'null' && storedToken !== 'undefined' ? storedToken : null;
+// Safe localStorage access - initialize token from localStorage
+const getStoredToken = () => {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    const storedToken = localStorage.getItem('access_token');
+    return storedToken && storedToken !== 'null' && storedToken !== 'undefined' ? storedToken : null;
+  }
+  return null;
+};
+
+let authToken: string | null = getStoredToken();
 
 export const setAuthToken = (token: string | null) => {
   authToken = token;
-  if (token) {
-    localStorage.setItem('access_token', token);
-  } else {
-    localStorage.removeItem('access_token');
+  if (typeof window !== 'undefined' && window.localStorage) {
+    if (token) {
+      localStorage.setItem('access_token', token);
+    } else {
+      localStorage.removeItem('access_token');
+    }
   }
 };
 

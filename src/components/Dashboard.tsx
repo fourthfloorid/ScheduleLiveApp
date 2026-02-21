@@ -30,10 +30,21 @@ export default function Dashboard({ user, onLogout, onUpdateUser }: DashboardPro
   const fetchSchedules = useScheduleStore(state => state.fetchSchedules);
 
   useEffect(() => {
-    // Fetch all data when dashboard loads
-    fetchBrands();
-    fetchRooms();
-    fetchSchedules();
+    // Fetch all data when dashboard loads - with error handling
+    const loadData = async () => {
+      try {
+        await Promise.all([
+          fetchBrands(),
+          fetchRooms(),
+          fetchSchedules()
+        ]);
+      } catch (error) {
+        console.error('Error loading dashboard data:', error);
+        // App will continue with empty states
+      }
+    };
+    
+    loadData();
   }, [fetchBrands, fetchRooms, fetchSchedules]);
 
   const handleNavigate = (page: Page) => {

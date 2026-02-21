@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import svgPaths from "./svg-btwbtegx6j";
 
 interface LoginProps {
@@ -157,26 +157,30 @@ function Form({ onSubmit, onSignupClick, isLoading }: { onSubmit: (email: string
   const [rememberMe, setRememberMe] = useState(false);
 
   // Load saved credentials when component mounts
-  useState(() => {
-    const savedEmail = localStorage.getItem('rememberedEmail');
-    const savedPassword = localStorage.getItem('rememberedPassword');
-    if (savedEmail && savedPassword) {
-      setEmail(savedEmail);
-      setPassword(savedPassword);
-      setRememberMe(true);
+  useEffect(() => {
+    if (typeof window !== 'undefined' && window.localStorage) {
+      const savedEmail = localStorage.getItem('rememberedEmail');
+      const savedPassword = localStorage.getItem('rememberedPassword');
+      if (savedEmail && savedPassword) {
+        setEmail(savedEmail);
+        setPassword(savedPassword);
+        setRememberMe(true);
+      }
     }
-  });
+  }, []);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     
     // Save or remove credentials based on remember me checkbox
-    if (rememberMe) {
-      localStorage.setItem('rememberedEmail', email);
-      localStorage.setItem('rememberedPassword', password);
-    } else {
-      localStorage.removeItem('rememberedEmail');
-      localStorage.removeItem('rememberedPassword');
+    if (typeof window !== 'undefined' && window.localStorage) {
+      if (rememberMe) {
+        localStorage.setItem('rememberedEmail', email);
+        localStorage.setItem('rememberedPassword', password);
+      } else {
+        localStorage.removeItem('rememberedEmail');
+        localStorage.removeItem('rememberedPassword');
+      }
     }
     
     onSubmit(email, password);
@@ -187,7 +191,7 @@ function Form({ onSubmit, onSignupClick, isLoading }: { onSubmit: (email: string
     setRememberMe(newValue);
     
     // If unchecking, remove saved credentials immediately
-    if (!newValue) {
+    if (!newValue && typeof window !== 'undefined' && window.localStorage) {
       localStorage.removeItem('rememberedEmail');
       localStorage.removeItem('rememberedPassword');
     }

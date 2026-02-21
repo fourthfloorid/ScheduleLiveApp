@@ -29,7 +29,8 @@ export const useScheduleStore = create<ScheduleStore>((set, get) => ({
       set({ schedules, loading: false });
     } catch (error) {
       console.error('Fetch schedules error:', error);
-      set({ loading: false });
+      // Don't throw, just set empty state
+      set({ loading: false, schedules: [] });
     }
   },
   

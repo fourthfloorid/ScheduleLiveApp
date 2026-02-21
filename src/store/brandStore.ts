@@ -27,6 +27,7 @@ export const useBrandStore = create<BrandStore>((set, get) => ({
       set({ brands, loading: false });
     } catch (error) {
       console.error('Failed to fetch brands:', error);
+      // Don't throw, just set empty state
       set({ loading: false, brands: [] });
     }
   },
