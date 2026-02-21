@@ -28,9 +28,10 @@ function AppContent() {
   useEffect(() => {
     const checkSession = async () => {
       try {
+        console.log('[App] Starting session check...');
         const token = getAuthToken();
         if (token) {
-          console.log('Found existing token, checking session...');
+          console.log('[App] Found existing token, checking session...');
           const supabase = createClient(
             `https://${projectId}.supabase.co`,
             publicAnonKey
@@ -39,7 +40,7 @@ function AppContent() {
           const { data: { user }, error } = await supabase.auth.getUser(token);
           
           if (user && !error) {
-            console.log('Session valid, restoring user:', user);
+            console.log('[App] Session valid, restoring user:', user.id);
             setCurrentUser({
               id: user.id,
               email: user.email || '',
@@ -48,15 +49,18 @@ function AppContent() {
               photoUrl: user.user_metadata?.photoUrl
             });
           } else {
-            console.log('Session invalid or expired, clearing token');
+            console.log('[App] Session invalid or expired, clearing token');
             setAuthToken(null);
           }
+        } else {
+          console.log('[App] No existing token found');
         }
       } catch (error) {
-        console.error('Session check error:', error);
+        console.error('[App] Session check error:', error);
         setAuthToken(null);
         setError('Failed to restore session. Please login again.');
       } finally {
+        console.log('[App] Session check complete, setting isLoading to false');
         setIsLoading(false);
       }
     };
@@ -128,9 +132,10 @@ function AppContent() {
   }
 
   if (!currentUser) {
+    console.log('[App] Rendering login screen');
     return (
       <>
-        <div className="bg-white relative size-full overflow-hidden">
+        <div className="bg-white relative w-full h-screen overflow-hidden">
           <div className="absolute inset-0 overflow-auto p-4 md:p-6 flex items-start justify-center pt-4 md:pt-12">
             <div className="w-full max-w-2xl">
               <WelcomeGuide />
@@ -149,10 +154,13 @@ function AppContent() {
     );
   }
 
+  console.log('[App] Rendering dashboard');
   return <Dashboard user={currentUser} onLogout={handleLogout} onUpdateUser={handleUpdateUser} />;
 }
 
 export default function App() {
+  console.log('[App] Rendering App component...');
+  
   return (
     <ErrorBoundary>
       <AppContent />

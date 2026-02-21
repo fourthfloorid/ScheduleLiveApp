@@ -56,39 +56,6 @@ function Icon() {
   );
 }
 
-function Container1() {
-  return (
-    <div className="bg-[#f3f3f5] relative rounded-[8px] shrink-0 w-full" data-name="Container">
-      <div aria-hidden="true" className="absolute border border-[#d1d5dc] border-solid inset-0 pointer-events-none rounded-[8px]" />
-      <div className="flex flex-row items-center size-full">
-        <div className="content-stretch flex items-center justify-between px-[12px] py-[16px] relative w-full">
-          <div className="content-stretch flex gap-[10px] items-center justify-center relative shrink-0 w-full">
-            <Icon />
-            <input
-              type="text"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              placeholder="Enter your username"
-              className="font-['Roboto:Regular',sans-serif] font-normal leading-[normal] flex-1 bg-transparent border-none outline-none text-[#1f2937] text-[16px]"
-              style={{ fontVariationSettings: "'wdth' 100" }}
-              required
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function Container2() {
-  return (
-    <div className="content-stretch flex flex-col gap-[5.993px] items-start relative shrink-0 w-full" data-name="Container">
-      <Label />
-      <Container1 />
-    </div>
-  );
-}
-
 function Label1() {
   return (
     <div className="content-stretch flex items-center relative shrink-0" data-name="Label">
@@ -338,8 +305,10 @@ function Container8({ onLogin, onSignupClick, isLoading }: { onLogin: (email: st
 }
 
 export default function Login({ onLogin, onSignupClick, isLoading }: LoginProps) {
+  console.log('[Login] Rendering Login component');
+  
   return (
-    <div className="bg-white relative size-full" data-name="Login">
+    <div className="bg-white relative size-full min-h-screen" data-name="Login">
       <Container8 onLogin={onLogin} onSignupClick={onSignupClick} isLoading={isLoading} />
     </div>
   );
