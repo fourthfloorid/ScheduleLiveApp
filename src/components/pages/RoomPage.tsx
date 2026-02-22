@@ -358,7 +358,7 @@ export default function RoomPage({ user }: RoomPageProps) {
     if (!assignForm.date) return false;
     
     const now = new Date();
-    const currentDate = now.toISOString().split('T')[0];
+    const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
     // Only check for today's date
     if (assignForm.date !== currentDate) return false;
@@ -371,7 +371,8 @@ export default function RoomPage({ user }: RoomPageProps) {
   };
 
   // Get today's date
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   // Selected host's available time slots
   const selectedHost = availableHosts.find(h => h.id === assignForm.hostId);

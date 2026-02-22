@@ -71,7 +71,8 @@ export default function DatePicker({
 
   const handleDateSelect = (day: number) => {
     const selectedDate = new Date(year, month, day);
-    const dateString = selectedDate.toISOString().split('T')[0];
+    // Use local date format to avoid timezone issues
+    const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     
     // Check if date is within min/max range
     if (minDate && dateString < minDate) return;
@@ -82,7 +83,7 @@ export default function DatePicker({
   };
 
   const isDateDisabled = (day: number) => {
-    const dateString = new Date(year, month, day).toISOString().split('T')[0];
+    const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     if (minDate && dateString < minDate) return true;
     if (maxDate && dateString > maxDate) return true;
     return false;
@@ -90,7 +91,7 @@ export default function DatePicker({
 
   const isDateSelected = (day: number) => {
     if (!value) return false;
-    const dateString = new Date(year, month, day).toISOString().split('T')[0];
+    const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
     return dateString === value;
   };
 
@@ -227,7 +228,8 @@ export default function DatePicker({
             <button
               type="button"
               onClick={() => {
-                const today = new Date().toISOString().split('T')[0];
+                const now = new Date();
+                const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
                 if (minDate && today < minDate) return;
                 if (maxDate && today > maxDate) return;
                 onChange(today);

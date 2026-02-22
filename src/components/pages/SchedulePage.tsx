@@ -47,8 +47,8 @@ export default function SchedulePage({ user }: SchedulePageProps) {
   };
 
   const handleTimeSlotToggle = (timeSlot: string) => {
-    // Check if time slot is in the past (for today's date)
-    if (isTimeSlotPast(timeSlot)) {
+    // Check if selected date is today and time has passed
+    if (isTimePassed(timeSlot)) {
       return; // Don't allow selection of past time slots
     }
     
@@ -61,18 +61,18 @@ export default function SchedulePage({ user }: SchedulePageProps) {
     });
   };
 
-  // Check if a time slot is in the past
-  const isTimeSlotPast = (timeSlot: string): boolean => {
+  // Check if selected date is today and time has passed
+  const isTimePassed = (time: string) => {
     if (!selectedDate) return false;
     
     const now = new Date();
-    const currentDate = now.toISOString().split('T')[0];
+    const currentDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
     
     // Only check for today's date
     if (selectedDate !== currentDate) return false;
     
     const currentHour = now.getHours();
-    const timeHour = parseInt(timeSlot.split(':')[0]);
+    const timeHour = parseInt(time.split(':')[0]);
     
     // Disable if time slot hour has passed or is current hour
     return timeHour <= currentHour;
@@ -123,7 +123,8 @@ export default function SchedulePage({ user }: SchedulePageProps) {
   };
 
   // Get today's date in YYYY-MM-DD format
-  const today = new Date().toISOString().split('T')[0];
+  const now = new Date();
+  const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`;
 
   // Group schedules by date
   const schedulesByDate = schedules.reduce((acc, schedule) => {
@@ -179,7 +180,7 @@ export default function SchedulePage({ user }: SchedulePageProps) {
               <div className="grid grid-cols-3 gap-2 max-h-80 overflow-y-auto p-2 bg-[#f9fafb] rounded-lg">
                 {TIME_SLOTS.map((timeSlot) => {
                   const isSelected = selectedTimeSlots.includes(timeSlot);
-                  const isPast = isTimeSlotPast(timeSlot);
+                  const isPast = isTimePassed(timeSlot);
                   return (
                     <button
                       key={timeSlot}
